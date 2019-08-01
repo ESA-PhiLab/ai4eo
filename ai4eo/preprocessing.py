@@ -12,8 +12,9 @@ import numpy as np
 import pandas as pd
 import rasterio as rio
 from rasterio.windows import Window
-from skimage.io import imread
 from shapely.geometry import box as Box
+from skimage.io import imread
+from sklearn.preprocessing import label_binarize
 from typhon.files import FileSet
 
 def extract_patches(
@@ -109,8 +110,8 @@ def extract_patches(
 class ImageLoader:
     def __init__(
             self, images, labels=None, augmentator=None, reader=None,
-            batch_size=None, balance=False,
-            shuffle=True, random_seed=42, max_workers=None
+            batch_size=None, balance=False, label_encoding='one-hot',
+            shuffle=True, random_seed=42, max_workers=None, classes=None
         ):
         """Create an ImageLoader
 
@@ -134,6 +135,7 @@ class ImageLoader:
                 supported are keras, imgaug and Albumentations image
                 augmentators. Can be also set to a function that will be called
                 on each image before yielding it to the model. Default: None
+            classes: Classes which will be encoded in this dataset.
             batch_size: Size of one batch. Default: 32.
             balance: Can be either:
                 * *True*: the minority classes are going to be oversampled so
@@ -146,7 +148,9 @@ class ImageLoader:
                 each batch. Works only if the number of classes is equal or
                 lower than the batch size. Defult: False.
             label_encoding: Can be either:
+                * *False*: No encoding.
                 * *one-hot*: 1D numpy array of binary labels
+                *
                 ...
                 Default: *one-hot*.
 
@@ -188,6 +192,20 @@ class ImageLoader:
 
         self.images = np.array(images)
         self.labels = None if labels is None else np.array(labels)
+
+        self.classes = classes
+        if self.classes is None and self.labels is not None:
+            self.classes = np.unique(self.labels)
+
+        if self.classes is not None:
+            self.class_indices = {
+                index: label for index, label in enumerate(self.classes)
+            }
+        else:
+            self.class_indices = None
+
+        if label_encoding == 'one-hot':
+            self.labels = label_binarize(self.labels, classes=self.classes)
 
         self.reader = reader
         self.augmentator = augmentator
