@@ -111,7 +111,8 @@ class ImageLoader:
     def __init__(
             self, images, labels=None, augmentator=None, reader=None,
             batch_size=None, balance=False, label_encoding='one-hot',
-            shuffle=True, random_seed=42, max_workers=None, classes=None
+            shuffle=True, random_seed=42, max_workers=None, classes=None,
+            preprocess_input=None,
         ):
         """Create an ImageLoader
 
@@ -217,6 +218,7 @@ class ImageLoader:
         # elif callable(getattr(self.augmentator, "augment_batches", None)):
         #     self.augmentator_type = 'imgaug'
         self.batch_size = batch_size or 32
+        self.preprocess_input = preprocess_input
 
         # To make the experiments reproducible:
         self.random_state = np.random.RandomState(random_seed)
@@ -286,6 +288,9 @@ class ImageLoader:
                 batch = self.augmentator.augment_images(batch)
             else:
                 batch = list(pool.map(self.read_and_augment, filenames))
+
+        if self.preprocess_input is not None:
+            batch = [self.preprocess_input(img) for img in batch]
 
         if self.labels is None:
             return np.array(batch)
