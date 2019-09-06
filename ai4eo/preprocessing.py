@@ -107,7 +107,7 @@ def extract_patches(
                 yield idx, patch
 
 
-class ImageLoader:
+class ImageLoader(Sequence):
     def __init__(
             self, images, labels=None, augmentator=None, reader=None,
             batch_size=None, balance=False, label_encoding='one-hot',
@@ -151,7 +151,8 @@ class ImageLoader:
             label_encoding: Can be either:
                 * *False*: No encoding.
                 * *one-hot*: 1D numpy array of binary labels
-                *
+                * *binary*: Use when you have only two classes. One will be
+                    labelled with 0, the other one with 1.
                 ...
                 Default: *one-hot*.
 
@@ -205,7 +206,7 @@ class ImageLoader:
         else:
             self.class_indices = None
 
-        if label_encoding == 'one-hot':
+        if label_encoding == 'one-hot' or label_encoding == 'binary':
             self.labels = label_binarize(self.labels, classes=self.classes)
 
         self.reader = reader
@@ -290,7 +291,8 @@ class ImageLoader:
                 batch = list(pool.map(self.read_and_augment, filenames))
 
         if self.preprocess_input is not None:
-            batch = [self.preprocess_input(img) for img in batch]
+            with ThreadPoolExecutor(max_workers=self.max_workers) as pool:
+                batch = list(pool.map(self.preprocess_input, batch))
 
         if self.labels is None:
             return np.array(batch)
@@ -317,7 +319,8 @@ class ImageLoader:
                 with gzip.open(filename, 'r') as f:
                     return np.load(f, allow_pickle=False)
             else:
-                return imread(filename)
+                img = imread(filename)
+                return img[..., :3]
         except Exception as error:
             print(f"ERROR: Could not read {filename}!")
             raise error
