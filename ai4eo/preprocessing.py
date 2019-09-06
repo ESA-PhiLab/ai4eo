@@ -110,7 +110,8 @@ def extract_patches(
 class ImageLoader(Sequence):
     def __init__(
             self, images, labels=None, augmentator=None, reader=None,
-            batch_size=None, balance=False, label_encoding='one-hot',
+            batch_size=None, balance=False, label_encoding='one-hot', 
+            yield_mode='both',
             shuffle=True, random_seed=42, max_workers=None, classes=None,
             preprocess_input=None, target_size=None,
         ):
@@ -125,10 +126,8 @@ class ImageLoader(Sequence):
             labels: This must be given or *images* must contain a placeholder
                 with *{label}* if you want to balance this dataset. Must be
                 an iterable of labels with the same length as *images*.
-            yield_labels: Yield labels if *True*.
-                Default: True if *labels* are set otherwise False.
             reader: Function to read the images. If None, images will be read
-                by scikit-image.imread function.
+                by opencv.imread function.
                 Default None.
             shuffle: Shuffle the dataset once before yielding. Default: True.
             random_seed: Number to initialize a random state. Default: 42.
@@ -155,8 +154,13 @@ class ImageLoader(Sequence):
                     labelled with 0, the other one with 1.
                 ...
                 Default: *one-hot*.
+            yield_mode: Defines what the ImageLoader will yield for each batch:
+                * *both*: Yields inputs and labels (required for training models).
+                * *inputs*: Yields only the inputs.
+                * *labels*: Yields only the labels.
+                Default: *both*.
             target_size: Set target size of images as a tuple of (height, width)
-                in pixels. Defaul: None
+                in pixels. Default: None
 
         Examples:
 
@@ -208,10 +212,13 @@ class ImageLoader(Sequence):
         else:
             self.class_indices = None
 
-        if label_encoding == 'one-hot' or label_encoding == 'binary':
-            self.labels = label_binarize(self.labels, classes=self.classes)
-            if label_encoding == 'binary':
-                self.labels = np.squeeze(self.labels)
+        if self.labels is not None:
+            if label_encoding == 'one-hot' or label_encoding == 'binary':
+                self.labels = label_binarize(self.labels, classes=self.classes)
+                if label_encoding == 'binary':
+                    self.labels = np.squeeze(self.labels)
+            
+        self.yield_mode = yield_mode
 
         self.reader = reader
         self.augmentator = augmentator
@@ -235,7 +242,7 @@ class ImageLoader(Sequence):
         self._indices = list(range(len(self.images)))
         if shuffle:
             self.random_state.shuffle(self._indices)
-
+            
         if not balance:
             self._weights = None
         # Check explicitly for True because iterables could also return True in
@@ -253,6 +260,8 @@ class ImageLoader(Sequence):
                 1 / label_counts.loc[labels].values / len(label_counts)
         else:
             self._weights = balance
+            
+        self.reset()
 
     def __len__(self):
         return len(self.images) // self.batch_size
@@ -285,6 +294,9 @@ class ImageLoader(Sequence):
             A batch of images as numpy.array (BxHxWxC or BxCxHxW) and - if
             *yield_labels* is True - a numpy array with the encoded labels.
         """
+        if self.yield_mode == 'labels':
+            return self.labels[sample_ids]
+        
         filenames = self.images[sample_ids]
 
         with ThreadPoolExecutor(max_workers=self.max_workers) as pool:
@@ -299,7 +311,7 @@ class ImageLoader(Sequence):
             with ThreadPoolExecutor(max_workers=self.max_workers) as pool:
                 batch = list(pool.map(self.preprocess_input, batch))
 
-        if self.labels is None:
+        if self.labels is None or self.yield_mode == 'inputs':
             return np.array(batch)
         else:
             return np.array(batch), self.labels[sample_ids]
