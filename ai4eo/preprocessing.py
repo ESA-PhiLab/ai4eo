@@ -210,6 +210,8 @@ class ImageLoader(Sequence):
 
         if label_encoding == 'one-hot' or label_encoding == 'binary':
             self.labels = label_binarize(self.labels, classes=self.classes)
+            if label_encoding == 'binary':
+                self.labels = np.squeeze(self.labels)
 
         self.reader = reader
         self.augmentator = augmentator
