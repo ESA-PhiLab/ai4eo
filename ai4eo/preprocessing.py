@@ -9,6 +9,7 @@ from random import Random
 
 import cv2 as cv
 from tensorflow.keras.utils import Sequence
+import matplotlib.pyplot as plt
 import numpy as np
 import pandas as pd
 import rasterio as rio
@@ -16,6 +17,7 @@ from rasterio.windows import Window
 from shapely.geometry import box as Box
 from sklearn.preprocessing import label_binarize
 from typhon.files import FileSet
+from typhon.plots import get_subplot_arrangement
 
 def extract_patches(
     image, polygons, shape, stride=None, threshold=0.5
@@ -349,3 +351,19 @@ class ImageLoader(Sequence):
             
     def reset(self):
         self.random_state = np.random.RandomState(self.random_seed)
+        
+    def show_random_samples(self, n=None, **kwargs):
+        n = n or self.batch_size
+        yield_mode = self.yield_mode
+        self.yield_mode = 'both'
+        images, labels = self.get_random_samples(n)
+        self.yield_mode = yield_mode
+        
+        rows, cols = get_subplot_arrangement(n)
+        fig, axes = plt.subplots(rows, cols, **kwargs)
+        axes = axes.flatten()
+        for i, image in enumerate(images):
+            axes[i].imshow(image)
+            axes[i].set_title(labels[i])
+        fig.tight_layout()
+        return fig, axes
