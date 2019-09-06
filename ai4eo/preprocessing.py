@@ -7,13 +7,13 @@ from collections import namedtuple
 from concurrent.futures import ThreadPoolExecutor, ProcessPoolExecutor
 from random import Random
 
+import cv2 as cv
 from tensorflow.keras.utils import Sequence
 import numpy as np
 import pandas as pd
 import rasterio as rio
 from rasterio.windows import Window
 from shapely.geometry import box as Box
-from skimage.io import imread
 from sklearn.preprocessing import label_binarize
 from typhon.files import FileSet
 
@@ -112,7 +112,7 @@ class ImageLoader(Sequence):
             self, images, labels=None, augmentator=None, reader=None,
             batch_size=None, balance=False, label_encoding='one-hot',
             shuffle=True, random_seed=42, max_workers=None, classes=None,
-            preprocess_input=None,
+            preprocess_input=None, target_size=None,
         ):
         """Create an ImageLoader
 
@@ -155,6 +155,8 @@ class ImageLoader(Sequence):
                     labelled with 0, the other one with 1.
                 ...
                 Default: *one-hot*.
+            target_size: Set target size of images as a tuple of (height, width)
+                in pixels. Defaul: None
 
         Examples:
 
@@ -220,7 +222,8 @@ class ImageLoader(Sequence):
         #     self.augmentator_type = 'imgaug'
         self.batch_size = batch_size or 32
         self.preprocess_input = preprocess_input
-
+        self.target_size = target_size
+        
         # To make the experiments reproducible:
         self.random_state = np.random.RandomState(random_seed)
         self.random_seed = random_seed
@@ -310,21 +313,25 @@ class ImageLoader(Sequence):
         else:
             return self.augmentator(image)
 
-    @staticmethod
-    def read(filename):
+    def read(self, filename):
         try:
             if filename.endswith('.npy'):
-                return np.load(filename, allow_pickle=False)
+                img = np.load(filename, allow_pickle=False)
             elif filename.endswith('.npy.gz'):
                 with gzip.open(filename, 'r') as f:
-                    return np.load(f, allow_pickle=False)
+                    img = np.load(f, allow_pickle=False)
             else:
-                img = imread(filename)
-                return img[..., :3]
+                img = cv.imread(filename)
+                # opencv reads in as BGR but we want it in RGB
+                img = cv.cvtColor(img, cv.COLOR_BGR2RGB)
+                img = img[..., :3]
         except Exception as error:
             print(f"ERROR: Could not read {filename}!")
             raise error
 
-
+        if self.target_size is not None:
+            return cv.resize(img, self.target_size)
+        return img
+            
     def reset(self):
         self.random_state = np.random.RandomState(self.random_seed)
