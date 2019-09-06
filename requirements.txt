@@ -1,0 +1,4 @@
+opencv-python
+rasterio
+shapely
+-e git://github.com/atmtools/typhon.git#egg=typhon
